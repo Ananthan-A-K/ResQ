@@ -1,0 +1,41 @@
+Start the Backend
+
+From inside the backend folder:
+
+python app.py
+
+
+You should see something like:
+
+ * Running on http://0.0.0.0:5000/ (Press CTRL+C to quit)
+
+
+The backend will:
+
+Poll USGS for earthquakes
+
+Poll Open-Meteo for severe weather
+
+Cache alerts & guidance into a local SQLite database
+
+5️⃣ Run the CLI Client
+
+Open a new terminal, activate the same virtual environment, then:
+
+cd client
+python cli.py
+
+
+The CLI will:
+
+Try to fetch live alerts from http://127.0.0.1:5000/alerts
+
+Cache them in ~/.safeahead_cache.json
+
+If the backend is offline, it shows the last cached alerts.
+
+6️⃣ Try It Out
+
+Visit http://127.0.0.1:5000/alerts in a browser to see JSON alerts.
+
+Stop the backend (Ctrl+C) and run the CLI again to see offline mode using the cached data.
