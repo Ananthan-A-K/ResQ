@@ -1,0 +1,22 @@
+Run instructions
+
+Create a new folder, place app.py, the templates folder, and the static folder as above.
+
+Create and activate a virtualenv (recommended):
+
+python -m venv venv
+source venv/bin/activate   # Linux / macOS
+venv\Scripts\activate.bat  # Windows
+pip install flask flask-cors
+
+
+Run:
+
+python app.py
+
+
+Open http://127.0.0.1:5000 in your browser.
+
+Click on the map to add a shelter. If your browser is offline, the form still works and the shelter is saved to a pending queue in localStorage. When you reconnect to the internet, queued shelters are automatically posted to the Flask API and appear on the shared map.
+
+The map loads cached assets via the service worker so the app shell can load offline (once the service worker is installed).
