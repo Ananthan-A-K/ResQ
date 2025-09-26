@@ -1,0 +1,229 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <title>Shelter Locator (Python + Flask)</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <style>
+    html,body,#map { height: 100%; margin: 0; }
+    .form-popup { position: absolute; z-index: 1000; background: white; padding: 10px; border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,.3); width: 260px; }
+    .topbar { position: absolute; left: 10px; top: 10px; z-index: 1100; background: rgba(255,255,255,0.95); padding: 6px 10px; border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,.2); }
+    .status-online { color: green; font-weight: bold; }
+    .status-offline { color: red; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+
+  <div class="topbar">
+    Status: <span id="status" class="status-offline">offline</span>
+    &nbsp;|&nbsp;
+    <button id="syncNow">Sync now</button>
+    &nbsp; Pending: <span id="pendingCount">0</span>
+  </div>
+
+  <div id="form" class="form-popup" style="display:none;">
+    <h3>Add Shelter</h3>
+    <label>Name:<br/><input id="sname" /></label><br/>
+    <label>Capacity:<br/><input id="scap" type="number" /></label><br/>
+    <label>Contact:<br/><input id="scontact" /></label><br/>
+    <label>Description:<br/><textarea id="sdesc"></textarea></label><br/>
+    <button id="save">Save</button>
+    <button id="cancel">Cancel</button>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    const apiBase = '/api';
+    const pendingKey = 'pendingShelters_v1';
+
+    // init map
+    const map = L.map('map').setView([20.5937, 78.9629], 5); // India view by default
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OSM' }).addTo(map);
+
+    let latlngForNew = null;
+
+    // UI
+    const form = document.getElementById('form');
+    const statusEl = document.getElementById('status');
+    const pendingCountEl = document.getElementById('pendingCount');
+
+    function updateStatus() {
+      if (navigator.onLine) {
+        statusEl.textContent = 'online';
+        statusEl.className = 'status-online';
+      } else {
+        statusEl.textContent = 'offline';
+        statusEl.className = 'status-offline';
+      }
+      updatePendingCount();
+    }
+
+    function storePending(doc) {
+      const arr = JSON.parse(localStorage.getItem(pendingKey) || '[]');
+      arr.push(doc);
+      localStorage.setItem(pendingKey, JSON.stringify(arr));
+      updatePendingCount();
+    }
+    function getPending() {
+      return JSON.parse(localStorage.getItem(pendingKey) || '[]');
+    }
+    function clearPending() { localStorage.removeItem(pendingKey); updatePendingCount(); }
+    function updatePendingCount() { pendingCountEl.textContent = getPending().length; }
+
+    // generate simple id
+    function genId() {
+      return 'shelter:' + new Date().toISOString().replace(/[:.]/g,'-') + ':' + Math.random().toString(36).slice(2,8);
+    }
+
+    // add marker to map
+    let shelterLayer = L.layerGroup().addTo(map);
+    function addMarkerFromDoc(d) {
+      if (!d.lat || !d.lng) return;
+      const m = L.marker([d.lat, d.lng]).addTo(shelterLayer);
+      const popupHtml = `<b>${escapeHtml(d.name)}</b><br/>${escapeHtml(d.description||'')}<br/>Capacity: ${d.capacity||'n/a'}<br/>Contact: ${escapeHtml(d.contact||'')}<br/>Source: ${escapeHtml(d.source||'client')}`;
+      m.bindPopup(popupHtml);
+    }
+
+    async function loadShelters() {
+      try {
+        const res = await fetch(apiBase + '/shelters');
+        if (!res.ok) throw new Error('bad');
+        const j = await res.json();
+        shelterLayer.clearLayers();
+        (j.shelters || []).forEach(s => {
+          addMarkerFromDoc(s);
+        });
+      } catch (e) {
+        console.log('Could not fetch shelters (offline?)', e);
+      }
+    }
+
+    // map click => show form
+    map.on('click', e => {
+      latlngForNew = e.latlng;
+      form.style.left = (e.containerPoint.x + 10) + 'px';
+      form.style.top = (e.containerPoint.y + 10) + 'px';
+      form.style.display = 'block';
+      document.getElementById('sname').value = '';
+      document.getElementById('scap').value = '';
+      document.getElementById('scontact').value = '';
+      document.getElementById('sdesc').value = '';
+    });
+    document.getElementById('cancel').onclick = () => form.style.display = 'none';
+
+    document.getElementById('save').onclick = async () => {
+      const name = document.getElementById('sname').value || 'Unnamed';
+      const capacity = parseInt(document.getElementById('scap').value) || 0;
+      const contact = document.getElementById('scontact').value || '';
+      const desc = document.getElementById('sdesc').value || '';
+      const doc = {
+        id: genId(),
+        name: name,
+        description: desc,
+        lat: latlngForNew.lat,
+        lng: latlngForNew.lng,
+        capacity: capacity,
+        contact: contact,
+        created_at: new Date().toISOString(),
+        modified_at: new Date().toISOString(),
+        source: 'client',
+        version: 1
+      };
+
+      // If online, attempt to post directly. If fails, queue.
+      if (navigator.onLine) {
+        try {
+          const r = await fetch(apiBase + '/shelters', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(doc)
+          });
+          const j = await r.json();
+          if (!r.ok) {
+            storePending(doc);
+            alert('Saved locally to pending queue (server error).');
+          } else {
+            alert('Saved to server.');
+            loadShelters(); // refresh map markers from server
+          }
+        } catch (err) {
+          console.log('Post failed, saving locally', err);
+          storePending(doc);
+          alert('Saved locally to pending queue (offline).');
+        }
+      } else {
+        storePending(doc);
+        alert('Saved locally to pending queue (offline).');
+      }
+
+      form.style.display = 'none';
+    };
+
+    async function syncPending() {
+      const pending = getPending();
+      if (!pending.length) return;
+      const successes = [];
+      for (const doc of pending) {
+        try {
+          const r = await fetch(apiBase + '/shelters', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(doc)
+          });
+          if (r.ok) {
+            successes.push(doc.id);
+          } else {
+            console.warn('Server refused doc', await r.text());
+          }
+        } catch (e) {
+          console.warn('Failed to sync doc', e);
+        }
+      }
+      if (successes.length) {
+        // remove successes from pending
+        const remaining = pending.filter(d => !successes.includes(d.id));
+        if (remaining.length) {
+          localStorage.setItem(pendingKey, JSON.stringify(remaining));
+        } else {
+          clearPending();
+        }
+        await loadShelters();
+      }
+      updatePendingCount();
+    }
+
+    // network events
+    window.addEventListener('online', () => {
+      updateStatus();
+      syncPending();
+    });
+    window.addEventListener('offline', updateStatus);
+
+    document.getElementById('syncNow').onclick = () => {
+      if (!navigator.onLine) {
+        alert('You are offline. Sync will run when online.');
+        return;
+      }
+      syncPending();
+    };
+
+    // init
+    updateStatus();
+    loadShelters();
+
+    // attempt periodic sync every 30s while online
+    setInterval(() => { if (navigator.onLine) syncPending(); }, 30*1000);
+
+    function escapeHtml(s){ return (s||'').toString().replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+    // register service worker (for offline caching of shell)
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/static/sw.js').then(() => {
+        console.log('SW registered');
+      }).catch(e => console.warn('SW failed', e));
+    }
+  </script>
+</body>
+</html>
