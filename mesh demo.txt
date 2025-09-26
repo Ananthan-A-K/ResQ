@@ -1,0 +1,141 @@
+Absolutely! Let’s make this **step-by-step** so you can demonstrate your Disaster Management Assistant app effectively on a laptop (or multiple devices if available). I’ll break it down into **all features**: SOS, direct messages, broadcast alerts, pending messages, ACKs, online/offline behavior, and alert feeds.
+
+---
+
+## **1. Setup**
+
+1. Open **two or more terminals** (or run on multiple laptops in the same LAN).
+2. Start the app with **unique node IDs**:
+
+```bash
+python dmasst_fixed_with_sos.py --id node1 --label Alice
+python dmasst_fixed_with_sos.py --id node2 --label Bob
+```
+
+* `--id` is unique per instance.
+* `--label` is human-friendly.
+
+3. (Optional) Provide an **alert feed URL** using `--feed <url>` for live demonstration.
+
+---
+
+## **2. Demonstrate Broadcast Messages**
+
+1. In node1 terminal:
+
+```text
+/send ALERT Flood warning near riverbank
+```
+
+2. Node2 should **receive** the broadcast immediately:
+
+```
+[recv] new msg ...
+[ack] sent ack ...
+[relay] relayed ...
+```
+
+* Check messages: `/list messages` on both nodes.
+
+**Explanation:** This shows **broadcast messaging + automatic relay + ACK**.
+
+---
+
+## **3. Demonstrate Directed (Private) Messages**
+
+1. In node1 terminal:
+
+```text
+/send MSG@node2 Hello Bob, this is Alice!
+```
+
+2. Node2 **receives** it, but any other nodes **ignore it**.
+
+* Use `/list messages` to see that `dest_id` is recorded correctly.
+
+**Explanation:** This demonstrates **targeted messaging**.
+
+---
+
+## **4. Demonstrate SOS Alerts**
+
+1. In node1 terminal:
+
+```text
+/send SOS Need immediate assistance at location X
+```
+
+2. SOS messages are **immediately relayed** to all nodes without delay.
+3. Node2 sees the SOS and **sends an ACK automatically**.
+
+* Node1 prints:
+
+```
+[sos-resend] resent SOS ... (attempt 1)
+[ack-recv] message ... acknowledged by node2
+```
+
+4. If a node **goes offline** before ACK, SOS messages are **resent automatically** up to MAX retries (`6`).
+
+**Explanation:** Demonstrates **SOS prioritization, retries, and ACK handling**.
+
+---
+
+## **5. Pending / Unacknowledged Messages**
+
+1. Use `/pending` to show **messages that haven’t been forwarded or acknowledged**.
+2. Disconnect a node (simulate offline), send messages, reconnect, and show how **pending messages are automatically forwarded**.
+
+**Explanation:** Shows **offline-first behavior and store-and-forward**.
+
+---
+
+## **6. Alerts / Feed Fetching**
+
+1. Provide a live JSON feed URL at startup:
+
+```bash
+python dmasst_fixed_with_sos.py --id node1 --label Alice --feed https://example.com/alert.json
+```
+
+2. After `30s` (poll interval), `/list alerts` shows fetched alerts.
+
+**Explanation:** Demonstrates **online monitoring and automatic alert fetching**.
+
+---
+
+## **7. Manual ACK Demonstration**
+
+1. Pick a message ID (from `/list messages`).
+2. Send an ACK manually:
+
+```text
+/ack <message_id>
+```
+
+* Verify that the **origin node marks it as acknowledged**.
+
+**Explanation:** Shows **manual ACKs in addition to auto ACKs**.
+
+---
+
+## **8. Cleanup / Expiry**
+
+* Messages older than **7 days** are removed automatically with `cleanup_expired()` (for demonstration, you could reduce the TTL temporarily).
+
+**Explanation:** Shows **database maintenance**.
+
+---
+
+## **9. Demonstration Tips**
+
+* **Multiple terminals/laptops** make it more realistic.
+* **Disconnect/reconnect network** to show offline-first message handling.
+* **Send multiple SOS messages** to show **retries and acknowledgement handling**.
+* Use `/list messages` and `/list alerts` often to visualize state.
+
+---
+
+If you want, I can **prepare a short demo script with commands and expected output** for **all features** so you can run it like a real presentation in 5–10 minutes.
+
+Do you want me to prepare that?
